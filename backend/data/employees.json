@@ -1,0 +1,23 @@
+[
+  {
+    "id": "EMP001",
+    "password": "password123",
+    "name": "John James",
+    "department": "Engineering",
+    "vehicleReg": "AB12 CDE"
+  },
+  {
+    "id": "EMP002",
+    "password": "password123",
+    "name": "Sarah Jenkins",
+    "department": "Operations",
+    "vehicleReg": "FG34 HIJ"
+  },
+  {
+    "id": "EMP003",
+    "password": "password123",
+    "name": "David Chen",
+    "department": "Finance",
+    "vehicleReg": "KL56 MNO"
+  }
+]
