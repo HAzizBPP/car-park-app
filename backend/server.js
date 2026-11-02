@@ -4,76 +4,123 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Helper to resolve directory paths in ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 5001;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// In-Memory Data Structure: Map for O(1) Employee Lookup
-const employeeMap = new Map();
+const employeeMap = new Map(); 
+const activeBookings = new Set(); // Key format: "employeeId_YYYY-MM-DD"
+let allBookings = []; 
+let waitlistQueue = []; 
 
-/**
- * Reads employees.json and populates the JavaScript Map data structure.
- * Satisfies the File Handling and Data Structure requirements.
- */
-async function loadEmployees() {
+async function loadData() {
   try {
-    const filePath = path.join(__dirname, 'data', 'employees.json');
-    const rawData = await fs.readFile(filePath, 'utf-8');
-    const employeeArray = JSON.parse(rawData);
+    const empPath = path.join(__dirname, 'data', 'employees.json');
+    const empData = await fs.readFile(empPath, 'utf-8');
+    JSON.parse(empData).forEach((emp) => employeeMap.set(emp.id, emp));
 
-    // Populate Map with Employee ID as Key
-    employeeArray.forEach((employee) => {
-      employeeMap.set(employee.id, employee);
+    const ledgerPath = path.join(__dirname, 'data', 'ledger.json');
+    const ledgerData = await fs.readFile(ledgerPath, 'utf-8');
+    const ledger = JSON.parse(ledgerData);
+    
+    waitlistQueue = ledger.waitlist || [];
+    allBookings = ledger.bookings || [];
+
+    // Store active bookings using composite key for date checks
+    allBookings.forEach(booking => {
+      activeBookings.add(`${booking.employeeId}_${booking.date}`);
     });
 
-    console.log(`[DATA] Successfully loaded ${employeeMap.size} employees into Map.`);
+    console.log(`[DATA] Loaded ${employeeMap.size} employees and ${allBookings.length} total bookings.`);
   } catch (error) {
-    console.error('[ERROR] Failed to read employees.json file:', error);
+    console.error('[ERROR] Failed to load data files:', error);
   }
 }
 
-// -------------------------------------------------------------
-// API ENDPOINT 1: POST /api/login
-// Handles User Authentication & Validation
-// -------------------------------------------------------------
+// POST /api/login
 app.post('/api/login', (req, res) => {
   const { id, password } = req.body;
+  if (!id || !password) return res.status(400).json({ error: 'ID and Password required' });
 
-  // Input Validation: Check for missing fields
-  if (!id || !password) {
-    return res.status(400).json({ 
-      error: 'Input error: Employee ID and Password are required.' 
-    });
-  }
-
-  // Data Retrieval: Fast lookup from Map using Employee ID
   const employee = employeeMap.get(id);
-
-  // Error Handling: Invalid credentials or unregistered ID
   if (!employee || employee.password !== password) {
-    return res.status(401).json({ 
-      error: 'Authentication failed: Invalid Employee ID or Password.' 
-    });
+    return res.status(401).json({ error: 'Invalid ID or password' });
   }
 
-  // Sanitize Output: Return user profile without leaking raw password
   const { password: _, ...userProfile } = employee;
-
-  return res.status(200).json({
-    message: 'Login successful',
-    user: userProfile
-  });
+  return res.status(200).json({ user: userProfile });
 });
 
-// Start Server & Load Initial Data
+// GET /api/grid?date=YYYY-MM-DD
+app.get('/api/grid', (req, res) => {
+  const { date } = req.query;
+  const targetDate = date || new Date().toISOString().split('T')[0];
+
+  const grid = Array(5).fill().map(() => Array(5).fill(null));
+
+  allBookings.forEach(booking => {
+    if (booking.date === targetDate) {
+      grid[booking.row][booking.col] = booking;
+    }
+  });
+
+  res.status(200).json({ grid });
+});
+
+// GET /api/bookings/:employeeId
+app.get('/api/bookings/:employeeId', (req, res) => {
+  const { employeeId } = req.params;
+  const userBookings = allBookings.filter(b => b.employeeId === employeeId);
+  res.status(200).json({ bookings: userBookings });
+});
+
+// POST /api/book
+app.post('/api/book', async (req, res) => {
+  const { employeeId, row, col, date } = req.body;
+  const bookingDate = date || new Date().toISOString().split('T')[0];
+  const bookingKey = `${employeeId}_${bookingDate}`;
+
+  // HTTP 409: Duplicate booking check for specific date
+  if (activeBookings.has(bookingKey)) {
+    return res.status(409).json({ error: 'You already have a booking for this date.' });
+  }
+
+  // Check space availability on specific date
+  const spaceTaken = allBookings.some(
+    b => b.date === bookingDate && b.row === row && b.col === col
+  );
+  if (spaceTaken) {
+    return res.status(400).json({ error: 'Space is already occupied on this date.' });
+  }
+
+  const newBooking = { employeeId, row, col, date: bookingDate };
+  allBookings.push(newBooking);
+  activeBookings.add(bookingKey);
+
+  try {
+    const ledgerPath = path.join(__dirname, 'data', 'ledger.json');
+    const ledgerData = JSON.parse(await fs.readFile(ledgerPath, 'utf-8'));
+    ledgerData.bookings = allBookings;
+    await fs.writeFile(ledgerPath, JSON.stringify(ledgerData, null, 2));
+
+    const grid = Array(5).fill().map(() => Array(5).fill(null));
+    allBookings.filter(b => b.date === bookingDate).forEach(b => {
+      grid[b.row][b.col] = b;
+    });
+
+    return res.status(200).json({ message: 'Booking confirmed', grid });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to save booking.' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`[SERVER] Running on http://localhost:${PORT}`);
-  loadEmployees();
+  loadData();
 });
