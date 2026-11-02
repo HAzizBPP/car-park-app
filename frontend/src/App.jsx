@@ -8,13 +8,17 @@ function App() {
   const [error, setError] = useState('');
   const [grid, setGrid] = useState([]);
   const [bookingMessage, setBookingMessage] = useState('');
+  
+  // Default to today's date
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [myBookings, setMyBookings] = useState([]);
 
-  // Automatically fetch the grid data once the user logs in
+  // Fetch grid based on selected date
   useEffect(() => {
     if (user) {
       const fetchGrid = async () => {
         try {
-          const response = await api.get('/grid');
+          const response = await api.get(`/grid?date=${selectedDate}`);
           setGrid(response.data.grid);
         } catch (err) {
           console.error('Failed to fetch grid:', err);
@@ -22,7 +26,24 @@ function App() {
       };
       fetchGrid();
     }
-  }, [user]);
+  }, [user, selectedDate]);
+
+  // Fetch user's personal booking list
+  const fetchMyBookings = async () => {
+    if (user) {
+      try {
+        const response = await api.get(`/bookings/${user.id}`);
+        setMyBookings(response.data.bookings);
+      } catch (err) {
+        console.error('Failed to fetch bookings:', err);
+      }
+    }
+  };
+
+  // Refresh bookings list when user logs in or date changes
+  useEffect(() => {
+    fetchMyBookings();
+  }, [user, selectedDate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -35,30 +56,29 @@ function App() {
     }
   };
 
-  // Handles clicking a space to book it
   const handleBookSpace = async (row, col) => {
-    if (grid[row][col] !== null) return; // Ignore clicks on occupied spaces
+    if (grid[row][col] !== null) return; 
     
     try {
       const response = await api.post('/book', { 
         employeeId: user.id, 
         row, 
-        col 
+        col,
+        date: selectedDate
       });
       
-      // Update grid with the new layout and show success message
       setGrid(response.data.grid);
       setBookingMessage('Booking confirmed!');
-      setError(''); // Clear any previous errors
+      setError('');
+      fetchMyBookings(); // Update the sidebar list immediately
     } catch (err) {
-      // This catches the 409 Conflict duplicate error from your backend
       setError(err.response?.data?.error || 'Failed to book space.');
       setBookingMessage('');
     }
   };
 
   return (
-    <div style={{ padding: '40px', fontFamily: 'Arial, sans-serif', maxWidth: '600px', margin: '0 auto' }}>
+    <div style={{ padding: '40px', fontFamily: 'Arial, sans-serif', maxWidth: '800px', margin: '0 auto' }}>
       <h2>Lloyds Car Park Portal</h2>
       
       {!user ? (
@@ -89,46 +109,79 @@ function App() {
           {error && <p style={{ color: 'red', marginTop: '10px' }}>{error}</p>}
         </form>
       ) : (
-        <div>
-          <h3>Welcome, {user.name}</h3>
-          <p><strong>Department:</strong> {user.department} | <strong>Vehicle Reg:</strong> {user.vehicleReg}</p>
+        <div style={{ display: 'flex', gap: '50px', flexWrap: 'wrap' }}>
           
-          <h4 style={{ marginTop: '30px' }}>Live Parking Availability</h4>
-          
-          {/* Feedback messages for the user */}
-          {bookingMessage && <p style={{ color: 'green', fontWeight: 'bold' }}>{bookingMessage}</p>}
-          {error && <p style={{ color: 'red', fontWeight: 'bold' }}>{error}</p>}
-          
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(5, 60px)', 
-            gap: '10px', 
-            marginTop: '15px' 
-          }}>
-            {grid.map((row, rowIndex) => 
-              row.map((cell, colIndex) => (
-                <div 
-                  key={`${rowIndex}-${colIndex}`}
-                  onClick={() => handleBookSpace(rowIndex, colIndex)}
-                  style={{
-                    width: '60px',
-                    height: '60px',
-                    backgroundColor: cell ? '#d9534f' : '#5cb85c',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontWeight: 'bold',
-                    borderRadius: '4px',
-                    cursor: cell ? 'not-allowed' : 'pointer'
-                  }}
-                  title={cell ? 'Occupied' : 'Click to book'}
-                >
-                  {cell ? 'X' : `${rowIndex},${colIndex}`}
-                </div>
-              ))
+          {/* LEFT SIDE: Grid and Booking */}
+          <div style={{ flex: '1', minWidth: '300px' }}>
+            <h3>Welcome, {user.name}</h3>
+            <p><strong>Department:</strong> {user.department} | <strong>Vehicle Reg:</strong> {user.vehicleReg}</p>
+            
+            <h4 style={{ marginTop: '30px' }}>Select Date</h4>
+            <input 
+              type="date" 
+              value={selectedDate} 
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                setBookingMessage('');
+                setError('');
+              }} 
+              style={{ padding: '8px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '4px' }}
+            />
+
+            <h4>Live Parking Availability</h4>
+            
+            {bookingMessage && <p style={{ color: 'green', fontWeight: 'bold' }}>{bookingMessage}</p>}
+            {error && <p style={{ color: 'red', fontWeight: 'bold' }}>{error}</p>}
+            
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(5, 60px)', 
+              gap: '10px', 
+              marginTop: '15px' 
+            }}>
+              {grid.map((row, rowIndex) => 
+                row.map((cell, colIndex) => (
+                  <div 
+                    key={`${rowIndex}-${colIndex}`}
+                    onClick={() => handleBookSpace(rowIndex, colIndex)}
+                    style={{
+                      width: '60px',
+                      height: '60px',
+                      backgroundColor: cell ? '#d9534f' : '#5cb85c',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontWeight: 'bold',
+                      borderRadius: '4px',
+                      cursor: cell ? 'not-allowed' : 'pointer'
+                    }}
+                    title={cell ? 'Occupied' : 'Click to book'}
+                  >
+                    {cell ? 'X' : `${rowIndex},${colIndex}`}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT SIDE: My Bookings */}
+          <div style={{ flex: '1', minWidth: '250px', padding: '20px', background: '#f9f9f9', borderRadius: '8px', height: 'fit-content' }}>
+            <h3 style={{ marginTop: 0 }}>My Bookings</h3>
+            {myBookings.length === 0 ? (
+              <p>No upcoming bookings.</p>
+            ) : (
+              <ul style={{ listStyleType: 'none', padding: 0 }}>
+                {myBookings.map((b, index) => (
+                  <li key={index} style={{ marginBottom: '10px', padding: '10px', background: '#fff', border: '1px solid #ddd', borderRadius: '4px' }}>
+                    <strong>Date:</strong> {b.date} <br/>
+                    <strong>Space:</strong> Row {b.row}, Col {b.col}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
+
         </div>
       )}
     </div>

@@ -5,6 +5,24 @@
       "row": 0,
       "col": 1,
       "date": "2026-11-02T12:26:04.107Z"
+    },
+    {
+      "employeeId": "EMP001",
+      "row": 1,
+      "col": 0,
+      "date": "2026-11-02"
+    },
+    {
+      "employeeId": "EMP001",
+      "row": 0,
+      "col": 2,
+      "date": "2026-11-03"
+    },
+    {
+      "employeeId": "EMP001",
+      "row": 1,
+      "col": 3,
+      "date": "2026-11-13"
     }
   ],
   "waitlist": []
