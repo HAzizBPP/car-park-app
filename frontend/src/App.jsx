@@ -9,11 +9,13 @@ function App() {
   const [grid, setGrid] = useState([]);
   const [bookingMessage, setBookingMessage] = useState('');
   
-  // Default to today's date
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [myBookings, setMyBookings] = useState([]);
 
-  // Fetch grid based on selected date
+  // Helper to convert row/col numbers to professional bay names (e.g., Row 0, Col 0 -> A-1)
+  const rowLetters = ['A', 'B', 'C', 'D', 'E'];
+  const formatBayName = (row, col) => `${rowLetters[row]}-${col + 1}`;
+
   useEffect(() => {
     if (user) {
       const fetchGrid = async () => {
@@ -28,7 +30,6 @@ function App() {
     }
   }, [user, selectedDate]);
 
-  // Fetch user's personal booking list
   const fetchMyBookings = async () => {
     if (user) {
       try {
@@ -40,7 +41,6 @@ function App() {
     }
   };
 
-  // Refresh bookings list when user logs in or date changes
   useEffect(() => {
     fetchMyBookings();
   }, [user, selectedDate]);
@@ -68,9 +68,9 @@ function App() {
       });
       
       setGrid(response.data.grid);
-      setBookingMessage('Booking confirmed!');
+      setBookingMessage(`Booking confirmed for bay ${formatBayName(row, col)}!`);
       setError('');
-      fetchMyBookings(); // Update the sidebar list immediately
+      fetchMyBookings();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to book space.');
       setBookingMessage('');
@@ -111,7 +111,6 @@ function App() {
       ) : (
         <div style={{ display: 'flex', gap: '50px', flexWrap: 'wrap' }}>
           
-          {/* LEFT SIDE: Grid and Booking */}
           <div style={{ flex: '1', minWidth: '300px' }}>
             <h3>Welcome, {user.name}</h3>
             <p><strong>Department:</strong> {user.department} | <strong>Vehicle Reg:</strong> {user.vehicleReg}</p>
@@ -153,19 +152,19 @@ function App() {
                       justifyContent: 'center',
                       color: 'white',
                       fontWeight: 'bold',
+                      fontSize: '14px',
                       borderRadius: '4px',
                       cursor: cell ? 'not-allowed' : 'pointer'
                     }}
-                    title={cell ? 'Occupied' : 'Click to book'}
+                    title={cell ? `Occupied by ${cell.employeeId}` : `Book bay ${formatBayName(rowIndex, colIndex)}`}
                   >
-                    {cell ? 'X' : `${rowIndex},${colIndex}`}
+                    {cell ? 'X' : formatBayName(rowIndex, colIndex)}
                   </div>
                 ))
               )}
             </div>
           </div>
 
-          {/* RIGHT SIDE: My Bookings */}
           <div style={{ flex: '1', minWidth: '250px', padding: '20px', background: '#f9f9f9', borderRadius: '8px', height: 'fit-content' }}>
             <h3 style={{ marginTop: 0 }}>My Bookings</h3>
             {myBookings.length === 0 ? (
@@ -175,7 +174,7 @@ function App() {
                 {myBookings.map((b, index) => (
                   <li key={index} style={{ marginBottom: '10px', padding: '10px', background: '#fff', border: '1px solid #ddd', borderRadius: '4px' }}>
                     <strong>Date:</strong> {b.date} <br/>
-                    <strong>Space:</strong> Row {b.row}, Col {b.col}
+                    <strong>Bay:</strong> {formatBayName(b.row, b.col)}
                   </li>
                 ))}
               </ul>
