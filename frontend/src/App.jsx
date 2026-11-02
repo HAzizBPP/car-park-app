@@ -10,9 +10,11 @@ function App() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      // Sending 'id' instead of 'email' to match your backend logic
       const response = await api.post('/login', { id: employeeId, password });
-      setUser(response.data.employee);
+      console.log("Server response:", response.data); // Let's peek at the data
+      
+      // Try to catch the data regardless of what the backend named it
+      setUser(response.data.employee || response.data.user || response.data); 
       setError('');
     } catch (err) {
       setError('Invalid Employee ID or password. Please try again.');
